@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const admin = require('firebase-admin');
-const moncash = require('nodejs-moncash-sdk');
+const axios = require('axios');
 
 dotenv.config();
 const app = express();
@@ -27,23 +27,34 @@ try {
   console.error("⚠️ Info Firebase:", error.message);
 }
 
-const db = admin.firestore();
-
-// 2. MonCash SDK Setup
+// 2. MonCash API Config (Sandbox / Live)
 const MONCASH_MODE = process.env.MONCASH_MODE || 'sandbox';
-const MONCASH_CLIENT_ID = process.env.MONCASH_CLIENT_ID || '7278441c0d9c766730fd776939accf3a';
-const MONCASH_CLIENT_SECRET = process.env.MONCASH_CLIENT_SECRET || 'R8Yvb1sknMCLxFDxkeYDZW2QJq-tVMKaoWpDNKPF5ZZ5D_CHP1cqs4u66ZEndxJD';
+const BASE_URL = MONCASH_MODE === 'live' 
+  ? 'https://moncashbutton.digicelgroup.com' 
+  : 'https://sandbox.moncashbutton.digicelgroup.com';
 
-moncash.configure({
-  mode: MONCASH_MODE,
-  client_id: MONCASH_CLIENT_ID,
-  client_secret: MONCASH_CLIENT_SECRET
-});
+const CLIENT_ID = process.env.MONCASH_CLIENT_ID;
+const CLIENT_SECRET = process.env.MONCASH_CLIENT_SECRET;
 
-console.log(`💳 MonCash SDK konfigure sou: ${MONCASH_MODE}`);
+// Fonksyon pou jwenn Access Token nan men MonCash
+async function getMonCashToken() {
+  try {
+    const auth = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+    const response = await axios.post(`${BASE_URL}/V1/oauth/token?grant_type=client_credentials`, {}, {
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Accept': 'application/json'
+      }
+    });
+    return response.data.access_token;
+  } catch (error) {
+    console.error("❌ Erè Token MonCash:", error.response?.data || error.message);
+    throw new Error("Echèk nan otantifikasyon MonCash");
+  }
+}
 
 // 3. Endpoint pou Kreye Peman (POST /create-payment)
-app.post('/create-payment', (req, res) => {
+app.post('/create-payment', async (req, res) => {
   try {
     const { amount, orderId } = req.body;
 
@@ -56,38 +67,38 @@ app.post('/create-payment', (req, res) => {
 
     console.log(`📥 Demann peman resevwa - OrderID: ${orderId}, Montan: ${amount} HTG`);
 
-    const create_payment_json = {
+    const token = await getMonCashToken();
+
+    // Kreye peman an sou MonCash API
+    const paymentResponse = await axios.post(`${BASE_URL}/V1/CreatePayment`, {
       amount: parseFloat(amount),
       orderId: String(orderId)
-    };
-
-    const payment_creator = moncash.payment;
-    payment_creator.create(create_payment_json, function (error, payment) {
-      if (error) {
-        console.error("❌ Erè MonCash SDK:", error);
-        return res.status(500).json({
-          success: false,
-          error: "Echèk nan kreye peman sou MonCash",
-          details: error
-        });
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
+    });
 
-      const redirectUrl = payment_creator.redirect_uri(payment);
-      console.log(`✅ Redirect URL jwenn: ${redirectUrl}`);
+    const paymentData = paymentResponse.data;
+    // Jwenn redirect URL la
+    const redirectUrl = `${BASE_URL}/V1/Payment/Redirect?token=${paymentData.payment_token.token}`;
 
-      return res.status(200).json({
-        success: true,
-        redirectUrl: redirectUrl
-      });
+    console.log(`✅ Redirect URL jwenn: ${redirectUrl}`);
+
+    return res.status(200).json({
+      success: true,
+      redirectUrl: redirectUrl
     });
 
   } catch (err) {
-    console.error("❌ Erè sèvè:", err);
+    console.error("❌ Erè sèvè:", err.response?.data || err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. Default Route pou tcheke si sèvè a ap mache
+// 4. Default Route
 app.get('/', (req, res) => {
   res.send("🚀 Sèvè StarX MonCash ap mache kòrèkteman!");
 });
