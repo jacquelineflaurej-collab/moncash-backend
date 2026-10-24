@@ -1,5 +1,5 @@
 {
-  "name": "moncash-backend1",
+  "name": "moncash-backend",
   "version": "1.0.0",
   "description": "MonCash backend server",
   "main": "server.js",
