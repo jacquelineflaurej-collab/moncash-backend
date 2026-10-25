@@ -31,8 +31,8 @@ try {
 // 2. MonCash API Config
 const MONCASH_MODE = process.env.MONCASH_MODE || 'sandbox';
 const BASE_URL = MONCASH_MODE === 'live' 
-  ? 'https://moncashbutton.digicelgroup.com' 
-  : 'https://sandbox.moncashbutton.digicelgroup.com';
+  ? 'https://moncashbutton.digicelgroup.com/Moncash-middleware' 
+  : 'https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware';
 
 const CLIENT_ID = process.env.MONCASH_CLIENT_ID;
 const CLIENT_SECRET = process.env.MONCASH_CLIENT_SECRET;
