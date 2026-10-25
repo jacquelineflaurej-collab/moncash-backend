@@ -37,18 +37,20 @@ const BASE_URL = MONCASH_MODE === 'live'
 const CLIENT_ID = process.env.MONCASH_CLIENT_ID;
 const CLIENT_SECRET = process.env.MONCASH_CLIENT_SECRET;
 
-// Fonksyon pou jwenn Access Token nan men MonCash
+// Fonksyon pou jwenn Access Token nan men MonCash (Sandbox optimized)
 async function getMonCashToken() {
   try {
-    const auth = Buffer.from(`${CLIENT_ID.trim()}:${CLIENT_SECRET.trim()}`).toString('base64');
-    console.log(`🔑 Y ap mande Token sou: ${BASE_URL}`);
+    console.log(`🔑 Y ap mande Token sou: ${BASE_URL}/V1/oauth/token`);
 
-    // MonCash mande grant_type nan x-www-form-urlencoded
-    const data = qs.stringify({ grant_type: 'client_credentials' });
+    // Voye client_id ak client_secret nan body la pou evite erè 403 Forbidden nan Sandbox
+    const data = qs.stringify({
+      grant_type: 'client_credentials',
+      client_id: CLIENT_ID.trim(),
+      client_secret: CLIENT_SECRET.trim()
+    });
 
     const response = await axios.post(`${BASE_URL}/V1/oauth/token`, data, {
       headers: {
-        'Authorization': `Basic ${auth}`,
         'Accept': 'application/json',
         'Content-Type': 'application/x-www-form-urlencoded'
       }
