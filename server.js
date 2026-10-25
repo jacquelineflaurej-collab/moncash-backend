@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const admin = require('firebase-admin');
 const axios = require('axios');
+const qs = require('qs'); // Nou itilize qs pou fòmate done yo kòrèkteman pou MonCash
 
 dotenv.config();
 const app = express();
@@ -27,7 +28,7 @@ try {
   console.error("⚠️ Info Firebase:", error.message);
 }
 
-// 2. MonCash API Config (Sandbox / Live)
+// 2. MonCash API Config
 const MONCASH_MODE = process.env.MONCASH_MODE || 'sandbox';
 const BASE_URL = MONCASH_MODE === 'live' 
   ? 'https://moncashbutton.digicelgroup.com' 
@@ -39,16 +40,24 @@ const CLIENT_SECRET = process.env.MONCASH_CLIENT_SECRET;
 // Fonksyon pou jwenn Access Token nan men MonCash
 async function getMonCashToken() {
   try {
-    const auth = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
-    const response = await axios.post(`${BASE_URL}/V1/oauth/token?grant_type=client_credentials`, {}, {
+    const auth = Buffer.from(`${CLIENT_ID.trim()}:${CLIENT_SECRET.trim()}`).toString('base64');
+    console.log(`🔑 Y ap mande Token sou: ${BASE_URL}`);
+
+    // MonCash mande grant_type nan x-www-form-urlencoded
+    const data = qs.stringify({ grant_type: 'client_credentials' });
+
+    const response = await axios.post(`${BASE_URL}/V1/oauth/token`, data, {
       headers: {
         'Authorization': `Basic ${auth}`,
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
+
+    console.log("✅ Token MonCash jwenn ak siksè!");
     return response.data.access_token;
   } catch (error) {
-    console.error("❌ Erè Token MonCash:", error.response?.data || error.message);
+    console.error("❌ Erè Otantifikasyon MonCash:", error.response?.status, error.response?.data || error.message);
     throw new Error("Echèk nan otantifikasyon MonCash");
   }
 }
@@ -82,8 +91,16 @@ app.post('/create-payment', async (req, res) => {
     });
 
     const paymentData = paymentResponse.data;
-    // Jwenn redirect URL la
-    const redirectUrl = `${BASE_URL}/V1/Payment/Redirect?token=${paymentData.payment_token.token}`;
+    
+    // Jwenn redirect URL la (sipòte tou de fòma posib nan MonCash API)
+    let redirectUrl = "";
+    if (paymentData.payment_token && paymentData.payment_token.token) {
+      redirectUrl = `${BASE_URL}/V1/Payment/Redirect?token=${paymentData.payment_token.token}`;
+    } else if (paymentData.redirect_uri) {
+      redirectUrl = paymentData.redirect_uri;
+    } else {
+      redirectUrl = `${BASE_URL}/V1/Payment/Redirect?token=${paymentData.token}`;
+    }
 
     console.log(`✅ Redirect URL jwenn: ${redirectUrl}`);
 
@@ -93,7 +110,7 @@ app.post('/create-payment', async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Erè sèvè:", err.response?.data || err.message);
+    console.error("❌ Erè sèvè detaye:", err.response?.data || err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
